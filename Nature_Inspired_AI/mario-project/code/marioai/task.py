@@ -40,6 +40,9 @@ class Task(object):
     def reset(self):
         '''Reinitialize the environment.'''
 
+        if getattr(self.env._tcpclient, 'sock', None) is None or not self.env._tcpclient.connected:
+            self.env._tcpclient.connect()
+
         self.env.reset()
         self.cum_reward = 0
         self.samples = 0
@@ -66,17 +69,21 @@ class Task(object):
 
         sense = self.env.get_sensors()
         # sense is now an Observation namedtuple
-        
+
+        if sense is None:
+            self.finished = True
+            return sense
+
         if sense.level_scene is None:
-            # Fitness packet (no level scene)
-            self.reward = sense.distance # Or standard fitness handling
+            # Fitness packet (no level scene) — game is over
+            self.reward = sense.distance
             self.status = sense.status
             self.finished = True
         else:
-            # Step reward
+            # Normal step
             self.reward = self.compute_reward(sense, self.last_observation)
             self.last_observation = sense
-            
+
         return sense
 
     def compute_reward(self, current_obs, last_obs):

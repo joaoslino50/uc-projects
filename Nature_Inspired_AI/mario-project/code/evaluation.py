@@ -4,6 +4,7 @@ from itertools import cycle
 from agents import MLPAgent, CodeAgent
 from tasks import MoveForwardTask, HunterTask
 import numpy as np
+import time
 
 # Variable that configures the number of parallel processes
 N_PROCESSES = 5
@@ -105,16 +106,18 @@ def evaluate(agent_class, ind_info):
     return evaluate_individual(ind_info)
 
 
-def evaluate_population(agent, population):
-    
-    # Match processes to tasks to avoid one worker being idle or double-booking
-    n_processes = N_PROCESSES
+worker_pool = None
 
-    # We pass 'tasks' to the initializer, so every worker picks one at startup
-    with Pool(processes=n_processes, initializer=init_worker, initargs=(agent,)) as pool:
-        # We only map the POPULATION. The tasks are already fixed in the workers.
-        rewards_list = pool.map(evaluate_individual, population)
+def get_pool(agent, population_size):
+    global worker_pool
+    if worker_pool is None:
+        n_processes = min(N_PROCESSES, max(1, population_size))
+        worker_pool = Pool(processes=n_processes, initializer=init_worker, initargs=(agent,))
+    return worker_pool
+
+def evaluate_population(agent, population):
+    pool = get_pool(agent, len(population))
+    rewards_list = pool.map(evaluate_individual, population)
     
-    worker_task = None
-        
+    # We do NOT close the pool here anymore so workers persist across iterations.
     return np.array(rewards_list)

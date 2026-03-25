@@ -11,7 +11,10 @@ class Experiment(object):
         self.max_fps = -1
 
     def _step(self):
-        self.agent.sense(self.task.get_sensors())
+        obs = self.task.get_sensors()
+        if obs is None:
+            return 0
+        self.agent.sense(obs)
         self.task.perform_action(self.agent.act())
         self.agent.give_rewards(self.task.reward, self.task.cum_reward)
         return self.task.reward

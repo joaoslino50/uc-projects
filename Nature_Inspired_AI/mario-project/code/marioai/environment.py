@@ -70,14 +70,16 @@ class Environment(object):
 
         data = self._tcpclient.recvData()
 
-        if data == 'ciao':
-            self._tcpclient.disconnect()
+        if not data:
+            # Empty bytes = server closed the connection abruptly/crashed
+            self._tcpclient.connected = False
+            return None
 
-        elif len(data) > 5:
+        if len(data) > 5:
             return extractObservation(data)
 
         else:
-            logging.warning('[ENVIRONMENT] Unexpected received data: %s'%data);
+            logging.warning('[ENVIRONMENT] Unexpected received data: %s' % data)
 
 
     def perform_action(self, action):
@@ -172,16 +174,23 @@ class TCPClient(object):
 
         logging.info('[TCPClient] trying to connect to %s:%s'%(h, p))
         self.sock = socket.socket()
+        self.sock.settimeout(10.0) # Add a timeout so recv() never blocks forever
 
         try:
             self.sock.connect((h, p))
             logging.info('[TCPClient] connection to %s:%s succeeded'%(h, p))
 
             data = self.recvData()
+            if not data:
+                logging.error('[TCPClient] connection failed - no greetings received.')
+                self.sock.close()
+                self.connected = False
+                return
+
             logging.info('[TCPClient] greetings received: %s'%data)
 
         except socket.error as message:
-            logging.error('[TCPClient] connection error: %s'%message[1])
+            logging.error('[TCPClient] connection error: %s' % getattr(message, 'args', message))
             sys.exit(1)
 
         message = 'Client: Dear Server, hello! I am %s\r\n'%self.name
@@ -206,8 +215,14 @@ class TCPClient(object):
         try:
             return self.sock.recv(self.buffer_size)
 
+        except socket.timeout:
+            logging.error('[TCPClient] timeout while receiving.')
+            self.connected = False
+            return b''
+
         except socket.error as message:
             logging.error('[TCPClient] error while receiving. Message: %s'%message)
+            self.connected = False
             raise socket.error
 
     def sendData(self, data):
@@ -221,6 +236,7 @@ class TCPClient(object):
 
         except socket.error as message:
             logging.error('[TCPClient] error while sending. Message: %s'%message)
+            self.connected = False
             raise socket.error
 
 

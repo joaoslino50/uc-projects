@@ -32,5 +32,10 @@ class MoveForwardTask(marioai.Task):
         """
         
         reward = 0
-        
+
+        if last_obs is None or current_obs.mario_pos is None or last_obs.mario_pos is None:
+            return reward
+
+        reward += current_obs.mario_pos[0] - last_obs.mario_pos[0]
+
         return reward
