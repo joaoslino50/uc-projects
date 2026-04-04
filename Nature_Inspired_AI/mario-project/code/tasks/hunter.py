@@ -11,32 +11,25 @@ class HunterTask(marioai.Task):
         self.name = "Hunter"
 
     def compute_reward(self, current_obs, last_obs):
-        # `mario_pos` is the correct attribute on the Observation object.
-        # (The Agent stores it as self.mario_floats, but Observation uses mario_pos.)\
-        if current_obs is None or last_obs is None:
-            return 0
-        if current_obs.mario_pos is None or last_obs.mario_pos is None:
-            return 0
+        """
+        Computes the reward for the current state of the game based on Mario's actions 
+        and the environment changes between the current and last observations.
+        This function evaluates Mario's progress, interactions with enemies, and overall 
+        performance to calculate a reward value. The reward is used as the fitness function for the evolutionary algorithm.
+        Parameters:
+        - current_obs: The current observation of the game state;
+        - last_obs: The previous observation of the game state;
+        Returns:
+        - reward (float): The computed reward value based on the game state changes.
+        Notes for Students:
+        - This function is critical for defining the algorithm behavior. The reward function 
+          directly impacts the fitness evaluation of the AI.
+        - You are encouraged to edit and experiment with this function to design a reward 
+          system that aligns with the objectives of the project.
+        - Consider the balance between encouraging progress, rewarding kills, and penalizing 
+          undesirable behaviors (e.g., cowardice or reckless actions).
+        """
 
-        reward = 0
-
-        delta_x = current_obs.mario_pos[0] - last_obs.mario_pos[0]
-        reward += delta_x
-
-        # ---- Stagnation penalty ----
-        # If Mario barely moved this frame he is stuck against a wall or
-        # standing still.  Penalise every idle frame heavily so the EA is
-        # forced to find a way past obstacles (i.e. jumping) rather than
-        # accepting a score of 0 per frame indefinitely.
-        STAGNATION_THRESHOLD = 0.5   # pixels; tweak if too sensitive
-        STAGNATION_PENALTY   = 1.0   # per idle frame (~24 frames/sec in game)
-        if abs(delta_x) < STAGNATION_THRESHOLD:
-            reward -= STAGNATION_PENALTY
-
-        # ---- Kill bonus ----
-        kills_now    = getattr(current_obs, 'kills_total', 0)
-        kills_before = getattr(last_obs,    'kills_total', 0)
-        if kills_now > kills_before:
-            reward += (kills_now - kills_before) * 1000
+        reward = 0     
 
         return reward

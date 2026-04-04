@@ -9,12 +9,7 @@ import time
 # Variable that configures the number of parallel processes
 N_PROCESSES = 5
 # Task Definition
-TASK_TO_SOLVE = HunterTask#MoveForwardTask
-# Starting difficulty level (overridden at runtime via evaluate_population)
-STARTING_DIFFICULTY = 0
-# Fitness penalty applied when Mario dies or times out (not a WIN).
-# Large enough to clearly distinguish a surviving run from a dying one.
-DEATH_PENALTY = 500
+TASK_TO_SOLVE = MoveForwardTask#HunterTask
 
 
 
@@ -24,41 +19,30 @@ def evaluate_agent(agent, task, episodes=1):
     """
     Evaluates the agent on the task for a given number of episodes.
     Returns the average fitness (reward).
-
-    Each sub-episode uses a freshly randomised level seed so the agent
-    must generalise across many layouts instead of memorising one fixed map.
-    Dying or timing out (status != WIN) incurs a DEATH_PENALTY so the EA
-    has a clear gradient toward survival.
     """
     exp = marioai.Experiment(task, agent)
     # Speed up simulation for training
-    exp.max_fps = -1
-
+    exp.max_fps = -1 
+    
     total_reward = 0
 
     for _ in range(episodes):
         episode_reward = 0
-        task.level_difficulty = STARTING_DIFFICULTY
-
+        task.level_difficulty = 0
         # Try up to 3 levels of increasing difficulty
         for _ in range(3):
-            # ---- Randomise level layout each sub-episode ----
-            # This forces the network to use its vision inputs to generalise
-            # instead of hard-coding a single memorised path.
-            task.env.level_seed = int(np.random.randint(1, 9999))
-
             rewards = exp.doEpisodes(1)
             episode_reward += task.cum_reward
-
-            if task.status == 1:   # WIN → try a harder level
+            
+            if task.status == 1: # WIN
                 task.level_difficulty += 1
             else:
-                # Mario died or ran out of time — penalise this outcome
-                episode_reward -= DEATH_PENALTY
                 break
-
+        
+                
         total_reward += episode_reward
-
+        
+    
     return total_reward / episodes
 
 
@@ -67,18 +51,22 @@ def evaluate_agent(agent, task, episodes=1):
 worker_task = None 
 worker_agent = None
 
-def init_worker(agent_class, starting_difficulty=0):
+def init_worker(agent_class):
     """
     This runs ONCE when each worker process starts.
-    `starting_difficulty` is passed via Pool initargs so the value is
-    available even when workers are spawned as separate processes.
     """
-    global worker_agent, worker_task, STARTING_DIFFICULTY
-    STARTING_DIFFICULTY = starting_difficulty
-
+    global worker_agent, worker_task
+    
+    # Each worker needs to pick a port. Since we have 10 workers 
+    # and 10 ports, we can use a trick to assign them.
     import multiprocessing
+    # Get the index of the current worker (0 through 9)
+    # Note: This is a hacky way to get a unique index; 
+    # alternatively, use a shared Counter/Queue.
     worker_idx = int(multiprocessing.current_process().name.split('-')[-1]) - 1
     port = port_list[worker_idx % len(port_list)]
+    
+    #print(f"Worker initialized: Connecting once to port {port}...")
 
     worker_agent = agent_class()
     if worker_task is None:
@@ -120,20 +108,16 @@ def evaluate(agent_class, ind_info):
 
 worker_pool = None
 
-def get_pool(agent, population_size, starting_difficulty=0):
+def get_pool(agent, population_size):
     global worker_pool
     if worker_pool is None:
         n_processes = min(N_PROCESSES, max(1, population_size))
-        worker_pool = Pool(
-            processes=n_processes,
-            initializer=init_worker,
-            initargs=(agent, starting_difficulty),
-        )
+        worker_pool = Pool(processes=n_processes, initializer=init_worker, initargs=(agent,))
     return worker_pool
 
-def evaluate_population(agent, population, starting_difficulty=0):
-    pool = get_pool(agent, len(population), starting_difficulty)
+def evaluate_population(agent, population):
+    pool = get_pool(agent, len(population))
     rewards_list = pool.map(evaluate_individual, population)
-
+    
     # We do NOT close the pool here anymore so workers persist across iterations.
     return np.array(rewards_list)
